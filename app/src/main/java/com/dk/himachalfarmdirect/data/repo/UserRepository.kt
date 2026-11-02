@@ -39,6 +39,14 @@ class UserRepository @Inject constructor(
     private val db: FirebaseFirestore,
 ) {
     private val modeKey = stringPreferencesKey("mode")
+    private val roleChosenKey = androidx.datastore.preferences.core.booleanPreferencesKey("role_chosen")
+
+    /** Whether the Buyer / Seller start page has been answered on this phone. */
+    val roleChosen: Flow<Boolean> = context.modeStore.data.map { it[roleChosenKey] ?: false }
+
+    suspend fun chooseRole(mode: AppMode) {
+        context.modeStore.edit { it[modeKey] = mode.name; it[roleChosenKey] = true }
+    }
 
     val authState: Flow<FirebaseUser?> = callbackFlow {
         val l = FirebaseAuth.AuthStateListener { trySend(it.currentUser) }
@@ -185,6 +193,7 @@ class UserRepository @Inject constructor(
             "servicePinCodes" to f.servicePinCodes.map { it.trim() }.filter { it.length == 6 },
             "serviceVillages" to f.serviceVillages.map { it.trim().lowercase() }.filter { it.isNotBlank() },
             "collectionCentreIds" to f.collectionCentreIds,
+            "contactPhone" to f.contactPhone.filter(Char::isDigit).takeLast(10),
             "updatedAt" to FieldValue.serverTimestamp(),
         )
         if (!existing.exists()) {

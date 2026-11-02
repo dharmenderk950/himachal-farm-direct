@@ -61,6 +61,7 @@ import com.dk.himachalfarmdirect.data.model.SellerStatus
 import com.dk.himachalfarmdirect.data.repo.AppMode
 import com.dk.himachalfarmdirect.data.repo.OrderRepository
 import com.dk.himachalfarmdirect.data.repo.UserRepository
+import com.dk.himachalfarmdirect.ui.common.ContactPanel
 import com.dk.himachalfarmdirect.ui.common.EmptyState
 import com.dk.himachalfarmdirect.ui.common.rupees
 import com.dk.himachalfarmdirect.ui.theme.FarmColors
@@ -109,6 +110,8 @@ data class AccountNav(
     val openHelp: () -> Unit,
     val openTickets: () -> Unit,
     val openFarmProfile: () -> Unit,
+    val openAddress: (String?) -> Unit,
+    val openRolePicker: () -> Unit,
 )
 
 @Composable
@@ -170,15 +173,20 @@ fun AccountScreen(nav: AccountNav) {
             ToggleRow("Tell me when new farmers join nearby", "Uses only your approximate area", p?.notifyNewSellers ?: true, vm::setNotifyNewSellers)
             LinkRow(Icons.Default.LocationOn, "Change delivery location", nav.openLocation)
         }
-        item { Text("Saved addresses", Modifier.padding(start = 16.dp, top = 20.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMedium) }
-        if (addresses.isEmpty()) item { Text("None yet — add one from \"Change delivery location\".", Modifier.padding(horizontal = 16.dp), color = FarmColors.Muted) }
+        item {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Delivery addresses", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                androidx.compose.material3.TextButton(onClick = { nav.openAddress(null) }) { Text("+ Add address") }
+            }
+        }
+        if (addresses.isEmpty()) item { Text("No address yet — tap \"+ Add address\".", Modifier.padding(horizontal = 16.dp), color = FarmColors.Muted) }
         items(addresses, key = { it.id }) { a ->
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().clickable { nav.openAddress(a.id) }.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Home, null, tint = FarmColors.Leaf)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(a.label + if (a.defaultAddress) " (default)" else "", style = MaterialTheme.typography.titleMedium)
-                    Text("${a.village} ${a.pinCode}", color = FarmColors.Muted)
+                    Text(listOf(a.line, a.village, a.pinCode).filter { it.isNotBlank() }.joinToString(", "), color = FarmColors.Muted)
                 }
                 IconButton(onClick = { vm.deleteAddress(a.id) }) { Icon(Icons.Default.Delete, "Delete address") }
             }
@@ -186,6 +194,7 @@ fun AccountScreen(nav: AccountNav) {
         item {
             Spacer(Modifier.height(12.dp))
             HorizontalDivider()
+            LinkRow(Icons.Default.Agriculture, "Start page: Buyer or Seller", nav.openRolePicker)
             LinkRow(Icons.Default.FavoriteBorder, "Wishlist", nav.openWishlist)
             LinkRow(Icons.Default.Notifications, "Notifications", nav.openNotifications)
             LinkRow(Icons.Default.HelpOutline, "Help Centre", nav.openHelp)
@@ -289,7 +298,17 @@ private fun OrderCard(o: Order, seller: Boolean, setStatus: (String, String) -> 
         o.createdAt?.let { Text(fmt.format(it.toDate()), color = FarmColors.Muted) }
         Text(o.lines.joinToString { "${it.name} × ${it.qty.toInt()} ${it.unit}" }, modifier = Modifier.padding(vertical = 4.dp))
         Text("Total ${rupees(o.grandTotal)} (delivery ${rupees(o.deliveryCharge)}) · ${o.fulfilment.replace('_', ' ').lowercase()}", color = FarmColors.Muted)
-        if (seller) Text("To: ${o.deliveryVillage} ${o.deliveryPin}", color = FarmColors.Muted)
+        if (o.collectionCentreName.isNotBlank()) Text("Collection centre: ${o.collectionCentreName}", color = FarmColors.Muted)
+        if (seller) {
+            // Farmer sees the buyer's contact + full address for this order only.
+            if (o.buyerPhone.isNotBlank()) ContactPanel("Buyer", o.buyerName.ifBlank { "Buyer" }, o.buyerPhone,
+                "Hello, about your Himachal Farm Direct order #${o.id.takeLast(6).uppercase()}", extra = o.deliveryAddress)
+            else Text("To: ${o.deliveryVillage} ${o.deliveryPin}", color = FarmColors.Muted)
+        } else {
+            // Buyer sees the seller's number once they've ordered.
+            ContactPanel("Seller", o.farmerName, o.farmerPhone,
+                "Hello, I ordered on Himachal Farm Direct (#${o.id.takeLast(6).uppercase()}).")
+        }
 
         val actions: List<Pair<String, String>> = if (seller) when (o.status) {
             "PLACED" -> listOf("ACCEPTED" to "Accept", "REJECTED" to "Reject")

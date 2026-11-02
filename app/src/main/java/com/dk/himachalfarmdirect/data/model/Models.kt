@@ -48,6 +48,8 @@ data class Farmer(
     /** Village names (lower-case) the farmer serves. */
     val serviceVillages: List<String> = emptyList(),
     val collectionCentreIds: List<String> = emptyList(),
+    /** Business contact number the farmer chooses to show buyers who order from them. */
+    val contactPhone: String = "",
     val rating: Double = 0.0,
     val createdAt: Timestamp? = null,
 )
@@ -88,7 +90,11 @@ data class Product(
 data class Address(
     val id: String = "",
     val label: String = "Home",
+    /** Receiver's name and mobile — shared only with the farmer of an order. */
+    val name: String = "",
+    val phone: String = "",
     val line: String = "",
+    val landmark: String = "",
     val village: String = "",
     val district: String = "",
     val pinCode: String = "",
@@ -152,6 +158,13 @@ data class Order(
     /** Address snapshot is visible only to buyer, the assigned farmer and admin. */
     val deliveryVillage: String = "",
     val deliveryPin: String = "",
+    /** Contact details, readable only by this buyer and this farmer (Firestore rules). */
+    val farmerPhone: String = "",
+    val buyerName: String = "",
+    val buyerPhone: String = "",
+    val deliveryAddress: String = "",
+    val collectionCentreName: String = "",
+    val stockDeducted: Boolean = false,
     val createdAt: Timestamp? = null,
 )
 

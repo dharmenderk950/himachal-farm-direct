@@ -74,11 +74,20 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class RootViewModel @Inject constructor(private val users: UserRepository) : ViewModel() {
+class RootViewModel @Inject constructor(
+    private val users: UserRepository,
+    cart: com.dk.himachalfarmdirect.data.repo.CartRepository,
+) : ViewModel() {
     /** null = still checking, false = signed out. */
     val auth = users.authState.map { u: FirebaseUser? -> u != null }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val mode = users.mode.stateIn(viewModelScope, SharingStarted.Eagerly, AppMode.BUYER)
+    val roleChosen = users.roleChosen.map<Boolean, Boolean?> { it }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val sellerStatus = users.sellerStatus.stateIn(viewModelScope, SharingStarted.Eagerly, com.dk.himachalfarmdirect.data.model.SellerStatus.NONE)
+    val profileName = users.profile.map { it?.name.orEmpty() }.stateIn(viewModelScope, SharingStarted.Eagerly, "")
+    val cartLines = cart.lines
+
+    fun chooseRole(m: AppMode) = viewModelScope.launch { users.chooseRole(m) }
 
     fun onSignedIn(name: String) = viewModelScope.launch { runCatching { users.ensureProfile(name) } }
     fun refreshProfile() = viewModelScope.launch { runCatching { users.ensureProfile() } }
@@ -107,12 +116,22 @@ fun AppRoot(openTarget: String?) {
             composable("login") { LoginScreen(onSignedIn = vm::onSignedIn, onHelp = { nav.navigate("help/article/b_login") }) }
             helpGraph(nav, signedIn = false)
         }
-        true -> MainScaffold(nav, mode, openTarget)
+        true -> {
+            val chosen by vm.roleChosen.collectAsStateWithLifecycle()
+            when (chosen) {
+                null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                else -> {
+                    // Decide the first screen once, so answering the start page doesn't rebuild navigation.
+                    val startAtRole = androidx.compose.runtime.remember { chosen == false }
+                    MainScaffold(nav, mode, openTarget, vm, startAtRole)
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun MainScaffold(nav: NavHostController, mode: AppMode, openTarget: String?) {
+private fun MainScaffold(nav: NavHostController, mode: AppMode, openTarget: String?, vm: RootViewModel, startAtRole: Boolean) {
     val seller = mode == AppMode.SELLER
     // Spec B: Home, Categories, Orders, Account. In Seller mode the same 4 slots show seller tools.
     val tabs = listOf(
@@ -123,6 +142,11 @@ private fun MainScaffold(nav: NavHostController, mode: AppMode, openTarget: Stri
     )
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
+    val cart by vm.cartLines.collectAsStateWithLifecycle()
+    val sellerStatus by vm.sellerStatus.collectAsStateWithLifecycle()
+    val profileName by vm.profileName.collectAsStateWithLifecycle()
+    val shoppingRoutes = setOf("home", "categories", "list/{kind}", "product/{productId}", "farmer/{farmerId}", "compare?q={q}", "wishlist")
+    val showCartBar = !seller && cart.isNotEmpty() && current in shoppingRoutes
 
     LaunchedEffect(openTarget) {
         when (openTarget) {
@@ -135,6 +159,8 @@ private fun MainScaffold(nav: NavHostController, mode: AppMode, openTarget: Stri
 
     Scaffold(
         bottomBar = {
+          androidx.compose.foundation.layout.Column {
+            if (showCartBar) CartBar(cart.size, cart.sumOf { it.price * it.qty }) { nav.navigate("cart") }
             if (current in tabs.map { it.route }) NavigationBar(containerColor = Color.White) {
                 tabs.forEach { t ->
                     NavigationBarItem(
@@ -151,9 +177,34 @@ private fun MainScaffold(nav: NavHostController, mode: AppMode, openTarget: Stri
                     )
                 }
             }
+          }
         },
     ) { pad ->
-        NavHost(nav, startDestination = "home", modifier = Modifier.padding(bottom = pad.calculateBottomPadding())) {
+        NavHost(nav, startDestination = if (startAtRole) "role" else "home", modifier = Modifier.padding(bottom = pad.calculateBottomPadding())) {
+            composable("role") {
+                RolePickerScreen(
+                    name = profileName,
+                    onBuyer = {
+                        vm.chooseRole(AppMode.BUYER)
+                        nav.navigate("home") { popUpTo("role") { inclusive = true } }
+                    },
+                    onSeller = {
+                        vm.chooseRole(AppMode.SELLER)
+                        val next = if (sellerStatus == com.dk.himachalfarmdirect.data.model.SellerStatus.APPROVED) "home" else "account"
+                        nav.navigate(next) { popUpTo("role") { inclusive = true } }
+                        if (sellerStatus == com.dk.himachalfarmdirect.data.model.SellerStatus.NONE ||
+                            sellerStatus == com.dk.himachalfarmdirect.data.model.SellerStatus.REJECTED) nav.navigate("farmProfile")
+                    },
+                )
+            }
+            composable("address/{addressId}") { com.dk.himachalfarmdirect.ui.location.AddressFormScreen(onBack = { nav.popBackStack() }) }
+            composable("compare?q={q}", listOf(navArgument("q") { type = NavType.StringType; defaultValue = "" })) {
+                com.dk.himachalfarmdirect.ui.product.CompareScreen(
+                    onBack = { nav.popBackStack() },
+                    openProduct = { nav.navigate("product/$it") },
+                    openCart = { nav.navigate("cart") },
+                )
+            }
             composable("home") {
                 if (seller) SellerHomeScreen(
                     openProducts = { nav.navigate("categories") }, openOrders = { nav.navigate("orders") },
@@ -170,6 +221,7 @@ private fun MainScaffold(nav: NavHostController, mode: AppMode, openTarget: Stri
                         openWishlist = { nav.navigate("wishlist") },
                         openNotifications = { nav.navigate("notifications") },
                         openHelp = { nav.navigate("help") },
+                        openCompare = { nav.navigate("compare?q=") },
                     )
                 )
             }
@@ -187,6 +239,8 @@ private fun MainScaffold(nav: NavHostController, mode: AppMode, openTarget: Stri
                         openHelp = { nav.navigate("help") },
                         openTickets = { nav.navigate("tickets") },
                         openFarmProfile = { nav.navigate("farmProfile") },
+                        openAddress = { id -> nav.navigate("address/${id ?: "new"}") },
+                        openRolePicker = { nav.navigate("role") },
                     )
                 )
             }
@@ -198,11 +252,13 @@ private fun MainScaffold(nav: NavHostController, mode: AppMode, openTarget: Stri
                 ProductDetailScreen(
                     onBack = { nav.popBackStack() }, openFarmer = { nav.navigate("farmer/$it") },
                     openProduct = { nav.navigate("product/$it") }, openCart = { nav.navigate("cart") },
+                    openCompare = { q -> nav.navigate("compare?q=${android.net.Uri.encode(q)}") },
                 )
             }
             composable("farmer/{farmerId}") { FarmerScreen(onBack = { nav.popBackStack() }, openProduct = { nav.navigate("product/$it") }) }
             composable("cart") {
                 CartScreen(onBack = { nav.popBackStack() }, openLocation = { nav.navigate("location") },
+                    addAddress = { nav.navigate("address/new") },
                     openOrders = { nav.navigate("orders") { popUpTo("home") } })
             }
             composable("wishlist") { WishlistScreen(onBack = { nav.popBackStack() }, openProduct = { nav.navigate("product/$it") }) }

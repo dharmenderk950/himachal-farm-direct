@@ -48,6 +48,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dk.himachalfarmdirect.R
@@ -73,6 +75,7 @@ data class HomeNav(
     val openWishlist: () -> Unit,
     val openNotifications: () -> Unit,
     val openHelp: () -> Unit,
+    val openCompare: () -> Unit,
 )
 
 @Composable
@@ -96,8 +99,11 @@ fun HomeScreen(nav: HomeNav) {
         if (s.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = FarmColors.Leaf)
 
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-            item { CategoryStrip(nav.openCategory) }
+            item { QuickActions(nav) }
             if (s.banners.isNotEmpty()) item { BannerRow(s.banners) { b -> b.categoryId.takeIf { it.isNotBlank() }?.let(nav.openCategory) } }
+            else item { HeroCard { nav.openCategory(Category.VEGETABLES.id) } }
+            item { SectionHeader("Shop by category") }
+            item { CategoryStrip(nav.openCategory) }
 
             if (s.discoveryOn && s.location != null) item {
                 Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -229,18 +235,68 @@ private fun HomeHeader(locationLabel: String, cartCount: Int, unread: Int, nav: 
     }
 }
 
+private val categoryTint = mapOf(
+    Category.VEGETABLES to Color(0xFFE3F4E1), Category.FRUITS to Color(0xFFFFE8E3),
+    Category.PULSES to Color(0xFFFFF3D6), Category.HONEY to Color(0xFFFFEFC7),
+    Category.DAIRY to Color(0xFFE6F1FB), Category.SPICES to Color(0xFFEAF6E7),
+)
+
 @Composable
 private fun CategoryStrip(onOpen: (String) -> Unit) {
-    LazyRow(contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(Category.entries.filter { it != Category.OTHER }) { c ->
-            Column(Modifier.width(76.dp).clickable { onOpen(c.id) }, horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(60.dp).clip(RoundedCornerShape(18.dp)).background(FarmColors.Mint), contentAlignment = Alignment.Center) {
-                    Text(c.emoji, style = MaterialTheme.typography.headlineSmall)
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(c.label, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Column(
+                Modifier.width(92.dp).clip(RoundedCornerShape(18.dp)).background(categoryTint[c] ?: FarmColors.Mint)
+                    .clickable { onOpen(c.id) }.padding(vertical = 14.dp, horizontal = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(c.emoji, fontSize = 34.sp)
+                Spacer(Modifier.height(6.dp))
+                Text(c.label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, color = FarmColors.Ink)
             }
         }
+    }
+}
+
+/** Four big shortcut buttons right under the header. */
+@Composable
+private fun QuickActions(nav: HomeNav) {
+    Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        QuickTile("⚖️", "Compare\nprices", Color(0xFFE6F1FB), Modifier.weight(1f), nav.openCompare)
+        QuickTile("📍", "Farmers\nnear me", FarmColors.Mint, Modifier.weight(1f)) { nav.openList("nearbyFarmers") }
+        QuickTile("🏷️", "Offers", Color(0xFFFFF3D6), Modifier.weight(1f)) { nav.openList("offers") }
+        QuickTile("❓", "Help", Color(0xFFF3E8FB), Modifier.weight(1f), nav.openHelp)
+    }
+}
+
+@Composable
+private fun QuickTile(emoji: String, label: String, tint: Color, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.clip(RoundedCornerShape(16.dp)).background(tint).clickable(onClick = onClick).padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(emoji, fontSize = 26.sp)
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, color = FarmColors.Ink, lineHeight = 15.sp)
+    }
+}
+
+/** Shown when the admin hasn't added banners yet. */
+@Composable
+private fun HeroCard(onShop: () -> Unit) {
+    Row(
+        Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp))
+            .background(Brush.linearGradient(listOf(FarmColors.Harvest, Color(0xFFFFD54F))))
+            .clickable(onClick = onShop).padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Fresh from Himachal farms", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = FarmColors.Ink)
+            Text("Buy straight from the farmer — fair price, no middlemen.", color = FarmColors.Soil)
+            Spacer(Modifier.height(8.dp))
+            Text("Shop vegetables  ›", fontWeight = FontWeight.Bold, color = FarmColors.Forest)
+        }
+        Text("🧺", fontSize = 56.sp)
     }
 }
 

@@ -48,6 +48,7 @@ interface Payload {
 }
 
 interface Evaluation {
+  farmerPhone?: string;
   eligible: boolean;
   reasons: string[];
   distanceKm: number;
@@ -192,6 +193,7 @@ async function evaluate(
     reasons: Array.from(new Set(reasons)),
     distanceKm, deliveryCharge: round2(deliveryCharge), modesAvailable, itemsTotal: round2(itemsTotal),
     centre, pricedLines, farmerName: farmer.farmName || farmer.name || "Farmer", address,
+    farmerPhone: farmer.contactPhone ?? "",
   };
 }
 
@@ -216,6 +218,8 @@ async function notifyAdmins(title: string, body: string, open: string) {
   const admins = await db.collection("users").where("isAdmin", "==", true).limit(20).get();
   await Promise.all(admins.docs.map((d) => notify(d.id, title, body, open, "support")));
 }
+
+const farmer_phone = (ev: Evaluation) => ev.farmerPhone ?? "";
 
 // --------------------------------------------------------------------------- callables
 
@@ -253,6 +257,12 @@ export const placeOrder = onCall(async (req) => {
       collectionCentre: ev.centre ?? null,
       distanceKm: ev.distanceKm,
       status: "PLACED",
+      stockDeducted: true,
+      farmerPhone: farmer_phone(ev),
+      buyerName: ev.address.name ?? "",
+      buyerPhone: ev.address.phone ?? "",
+      deliveryAddress: [ev.address.line, ev.address.landmark, ev.address.village, ev.address.district, ev.address.pinCode]
+        .filter((x: unknown) => typeof x === "string" && x).join(", "),
       // Only coarse area on the main doc; exact address goes to a restricted sub-doc.
       deliveryVillage: ev.address.village ?? "",
       deliveryPin: ev.address.pinCode ?? "",

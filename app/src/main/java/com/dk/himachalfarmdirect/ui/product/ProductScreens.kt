@@ -140,7 +140,7 @@ fun ProductListScreen(onBack: () -> Unit, openProduct: (String) -> Unit, openFar
 }
 
 @Composable
-fun ProductDetailScreen(onBack: () -> Unit, openFarmer: (String) -> Unit, openProduct: (String) -> Unit, openCart: () -> Unit) {
+fun ProductDetailScreen(onBack: () -> Unit, openFarmer: (String) -> Unit, openProduct: (String) -> Unit, openCart: () -> Unit, openCompare: (String) -> Unit) {
     val vm: DetailViewModel = hiltViewModel()
     val s by vm.state.collectAsStateWithLifecycle()
     val wish by vm.wishlistIds.collectAsStateWithLifecycle()
@@ -189,6 +189,11 @@ fun ProductDetailScreen(onBack: () -> Unit, openFarmer: (String) -> Unit, openPr
                     )
                     Text("Final delivery is confirmed at checkout for your address.", style = MaterialTheme.typography.bodyMedium, color = FarmColors.Muted)
                     if (p.description.isNotBlank()) { Spacer(Modifier.height(12.dp)); Text(p.description) }
+                    Spacer(Modifier.height(12.dp))
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { openCompare(p.name.split(" ").firstOrNull { it.length >= 2 } ?: p.name) },
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                    ) { Text("⚖️  Compare price with other farmers") }
                     Spacer(Modifier.height(16.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { if (qty > 1) qty -= 1 }) { Icon(Icons.Default.Remove, "Less") }
@@ -255,85 +260,105 @@ fun FarmerScreen(onBack: () -> Unit, openProduct: (String) -> Unit) {
 }
 
 @Composable
-fun CartScreen(onBack: () -> Unit, openLocation: () -> Unit, openOrders: () -> Unit) {
+fun CartScreen(onBack: () -> Unit, openLocation: () -> Unit, addAddress: () -> Unit, openOrders: () -> Unit) {
     val vm: CartViewModel = hiltViewModel()
     val lines by vm.lines.collectAsStateWithLifecycle()
     val addresses by vm.addresses.collectAsStateWithLifecycle()
+    val farmers by vm.farmers.collectAsStateWithLifecycle()
     val s by vm.state.collectAsStateWithLifecycle()
 
-    LaunchedEffect(s.placedOrderIds) { if (s.placedOrderIds.isNotEmpty() && lines.isEmpty()) openOrders() }
+    LaunchedEffect(lines.map { it.farmerId }.distinct()) { vm.loadFarmers(lines.map { it.farmerId }.distinct()) }
 
-    Scaffold(topBar = { BackBar("Cart", onBack) }) { pad ->
+    Scaffold(topBar = { BackBar("My cart", onBack) }) { pad ->
         if (lines.isEmpty()) {
             Column(Modifier.padding(pad)) {
-                if (s.placedOrderIds.isNotEmpty()) EmptyState("✅", "Order placed!", "The farmer has been notified. Track it under Orders.", "View orders", openOrders)
+                if (s.placedOrderIds.isNotEmpty()) EmptyState("✅", "Order placed!",
+                    "The farmer will confirm it. You can call the seller from the Orders page.", "View my orders", openOrders)
                 else EmptyState("🛒", "Your cart is empty", "Add fresh produce from farmers near you.")
             }
             return@Scaffold
         }
         LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            // 1) Address first — the easiest thing to get wrong.
+            item {
+                SectionHeader("1. Deliver to", if (addresses.isEmpty()) null else "+ New", addAddress)
+                if (addresses.isEmpty()) {
+                    Button(onClick = addAddress, modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(54.dp)) {
+                        Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Add delivery address")
+                    }
+                }
+                addresses.forEach { a ->
+                    Row(Modifier.fillMaxWidth().clickable { vm.selectAddress(a) }.padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(s.address?.id == a.id, { vm.selectAddress(a) })
+                        Column(Modifier.weight(1f)) {
+                            Text("${a.label}${if (a.name.isNotBlank()) " · " + a.name else ""}", style = MaterialTheme.typography.titleMedium)
+                            Text(listOf(a.line, a.village, a.pinCode).filter { it.isNotBlank() }.joinToString(", "), color = FarmColors.Muted)
+                            if (a.phone.isBlank()) Text("Add mobile number — tap to edit", color = FarmColors.Danger,
+                                modifier = Modifier.clickable(onClick = addAddress))
+                        }
+                    }
+                }
+                SectionHeader("2. How do you want it?")
+                listOf(
+                    FulfilmentMode.HOME_DELIVERY to "🚚  Home delivery",
+                    FulfilmentMode.FARM_PICKUP to "🧺  I'll pick up from the farm",
+                    FulfilmentMode.COLLECTION_CENTRE to "🏪  Collection centre",
+                ).forEach { (m, label) ->
+                    Row(Modifier.fillMaxWidth().clickable { vm.setMode(m) }.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(s.mode == m, { vm.setMode(m) }); Text(label)
+                    }
+                }
+                SectionHeader("3. Items")
+            }
+            // 2) One box per farmer, with the farmer's name and village.
             vm.groups(lines).forEach { (farmerId, group) ->
                 val q = s.quotes[farmerId]
+                val f = farmers[farmerId]
                 item(key = "g_$farmerId") {
-                    Column(Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).border(1.dp, FarmColors.Line, RoundedCornerShape(14.dp)).padding(12.dp)) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                        .border(1.dp, FarmColors.Line, RoundedCornerShape(14.dp)).padding(12.dp)) {
+                        Text("👨‍🌾 " + (f?.farmName?.ifBlank { f.name } ?: "Farmer") + (f?.village?.let { " · $it" } ?: ""),
+                            style = MaterialTheme.typography.titleMedium, color = FarmColors.Forest)
                         group.forEach { l ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text(l.name, style = MaterialTheme.typography.titleMedium)
-                                    Text("${rupees(l.price)} / ${l.unit}", color = FarmColors.Muted)
+                                    Text("${rupees(l.price)} / ${l.unit}  =  ${rupees(l.price * l.qty)}", color = FarmColors.Muted)
                                 }
                                 IconButton(onClick = { vm.setQty(l.productId, l.qty - 1) }) { Icon(if (l.qty <= 1) Icons.Default.Delete else Icons.Default.Remove, "Less") }
-                                Text("${l.qty.toInt()}")
+                                Text("${l.qty.toInt()}", style = MaterialTheme.typography.titleMedium)
                                 IconButton(onClick = { vm.setQty(l.productId, l.qty + 1) }) { Icon(Icons.Default.Add, "More") }
                             }
                         }
                         HorizontalDivider(Modifier.padding(vertical = 8.dp))
                         when {
                             s.checking -> Text("Checking delivery…", color = FarmColors.Muted)
-                            q == null -> Text("Choose an address to check delivery", color = FarmColors.Muted)
+                            q == null -> Text(if (addresses.isEmpty()) "Add an address above to check delivery" else "Choose an address above", color = FarmColors.Muted)
                             q.eligible -> Text(
-                                "✓ Available · ${Geo.formatKm(q.distanceKm)} · Delivery ${if (q.deliveryCharge == 0.0) "free" else rupees(q.deliveryCharge)}",
+                                "✓ Available" + (if (q.distanceKm > 0) " · ${Geo.formatKm(q.distanceKm)}" else "") +
+                                    " · " + when { s.mode == FulfilmentMode.FARM_PICKUP -> "pickup, no charge"; q.deliveryCharge == 0.0 -> "free delivery"; else -> "delivery ${rupees(q.deliveryCharge)}" },
                                 color = FarmColors.Leaf, fontWeight = FontWeight.SemiBold,
                             )
-                            else -> Text("✗ " + q.reasons.joinToString("; ").ifBlank { "Not available for this address" }, color = FarmColors.Danger)
+                            else -> Text("✗ " + q.reasons.joinToString("\n✗ ").ifBlank { "Not available for this address" }, color = FarmColors.Danger)
                         }
                     }
                 }
             }
-            item {
-                SectionHeader("Deliver to", "Add / change", openLocation)
-                if (addresses.isEmpty()) TextButton(onClick = openLocation, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Add a delivery address") }
-                addresses.forEach { a ->
-                    Row(Modifier.fillMaxWidth().clickable { vm.selectAddress(a) }.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(s.address?.id == a.id, { vm.selectAddress(a) })
-                        Column { Text(a.label, style = MaterialTheme.typography.titleMedium); Text("${a.village} ${a.pinCode}", color = FarmColors.Muted) }
-                    }
-                }
-                SectionHeader("How do you want it?")
-                listOf(
-                    FulfilmentMode.HOME_DELIVERY to "Home delivery",
-                    FulfilmentMode.COLLECTION_CENTRE to "Collect from nearest collection centre",
-                    FulfilmentMode.FARM_PICKUP to "Pick up from the farm",
-                ).forEach { (m, label) ->
-                    Row(Modifier.fillMaxWidth().clickable { vm.setMode(m) }.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(s.mode == m, { vm.setMode(m) }); Text(label)
-                    }
-                }
-            }
+            // 3) Total + order.
             item {
                 val eligibleTotal = vm.groups(lines).filterKeys { s.quotes[it]?.eligible == true }
                     .values.sumOf { g -> g.sumOf { it.price * it.qty } } +
                     s.quotes.values.filter { it.eligible }.sumOf { it.deliveryCharge }
                 Column(Modifier.padding(16.dp).background(FarmColors.Mint, RoundedCornerShape(14.dp)).padding(16.dp)) {
-                    Text("Payable: ${rupees(eligibleTotal)}", style = MaterialTheme.typography.titleLarge, color = FarmColors.Forest)
-                    Text("Cash / UPI on delivery. Items that can't be delivered stay in your cart.", color = FarmColors.Muted)
+                    Text("To pay: ${rupees(eligibleTotal)}", style = MaterialTheme.typography.titleLarge, color = FarmColors.Forest)
+                    Text("Pay the farmer by cash or UPI when you receive it. After ordering you'll see the seller's phone number.", color = FarmColors.Muted)
                     s.message?.let { Text(it, color = FarmColors.Danger, modifier = Modifier.padding(top = 6.dp)) }
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = vm::placeAll,
                         enabled = !s.placing && !s.checking && s.quotes.values.any { it.eligible },
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                    ) { Text(if (s.placing) "Placing order…" else "Place order") }
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                    ) { Text(if (s.placing) "Placing order…" else "Place order", style = MaterialTheme.typography.titleMedium) }
                 }
             }
         }

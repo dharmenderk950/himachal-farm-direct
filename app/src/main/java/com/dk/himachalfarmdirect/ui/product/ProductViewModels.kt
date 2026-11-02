@@ -162,9 +162,17 @@ data class CheckoutState(
 class CartViewModel @Inject constructor(
     private val cart: CartRepository,
     private val orders: OrderRepository,
+    private val market: MarketRepository,
     users: UserRepository,
 ) : ViewModel() {
     val lines = cart.lines
+    val farmers = MutableStateFlow<Map<String, Farmer>>(emptyMap())
+
+    fun loadFarmers(ids: List<String>) = viewModelScope.launch {
+        ids.filter { it !in farmers.value }.forEach { id ->
+            runCatching { market.farmer(id) }.getOrNull()?.let { f -> farmers.update { it + (id to f) } }
+        }
+    }
     val addresses = users.addresses().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _s = MutableStateFlow(CheckoutState())
     val state: StateFlow<CheckoutState> = _s
@@ -177,8 +185,13 @@ class CartViewModel @Inject constructor(
         }
     }
 
-    fun setQty(id: String, q: Double) { cart.setQty(id, q); recheck() }
+    fun setQty(id: String, q: Double) { cart.setQty(id, q) }
     fun selectAddress(a: Address) { _s.update { it.copy(address = a) }; recheck() }
+
+    init {
+        // Re-check whenever the cart's contents change.
+        viewModelScope.launch { cart.lines.collect { if (_s.value.address != null) recheck() } }
+    }
     fun setMode(m: FulfilmentMode) { _s.update { it.copy(mode = m) }; recheck() }
 
     /** Asks the backend for every farmer group: stock, service area, delivery availability, charge. */
@@ -192,13 +205,17 @@ class CartViewModel @Inject constructor(
         for ((farmerId, l) in groups) {
             runCatching { orders.checkDelivery(farmerId, l, a, _s.value.mode.name) }
                 .onSuccess { quotes[farmerId] = it }
-                .onFailure { err = it.friendly() }
+                .onFailure { err = "Couldn't check delivery: " + it.friendly() }
         }
         _s.update { it.copy(checking = false, quotes = quotes, message = err) }
     }
 
     fun placeAll() = viewModelScope.launch {
         val a = _s.value.address ?: run { _s.update { it.copy(message = "Choose a delivery address first") }; return@launch }
+        if (a.phone.filter(Char::isDigit).length < 10) {
+            _s.update { it.copy(message = "Please add your mobile number to this address (tap it in Account → Delivery addresses) so the farmer can reach you.") }
+            return@launch
+        }
         _s.update { it.copy(placing = true, message = null) }
         val placed = mutableListOf<String>()
         val problems = mutableListOf<String>()

@@ -346,6 +346,7 @@ class FarmProfileViewModel @Inject constructor(
         message.value = when {
             f.lat == 0.0 -> "Set your farm location on the map"
             f.farmName.isBlank() && f.name.isBlank() -> "Enter your name or farm name"
+            f.contactPhone.filter(Char::isDigit).length != 10 -> "Enter your 10-digit mobile number (shown to buyers who order)"
             f.village.isBlank() -> "Enter your village"
             f.pinCode.length != 6 -> "Enter the 6-digit PIN code of your farm"
             f.deliveryAvailable && f.deliveryRadiusKm <= 0 -> "Enter how far you can deliver (km)"
@@ -377,9 +378,16 @@ fun FarmProfileScreen(onBack: () -> Unit) {
 
     Scaffold(topBar = { BackBar("Farm details", onBack) }) { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Buyers see your farm's village and approximate distance. Your phone number stays private.", color = FarmColors.Muted)
+            Text("Buyers see your farm's village and approximate distance.", color = FarmColors.Muted)
             OutlinedTextField(f.name, { v -> vm.update { it.copy(name = v) } }, label = { Text("Your name") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(f.farmName, { v -> vm.update { it.copy(farmName = v) } }, label = { Text("Farm name") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                f.contactPhone, { v -> vm.update { it.copy(contactPhone = v.filter(Char::isDigit).take(10)) } },
+                label = { Text("Mobile number for buyers") }, prefix = { Text("+91 ") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                supportingText = { Text("Buyers see this number after they order from you, to call or WhatsApp.") },
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             Text("Farm location", style = MaterialTheme.typography.titleMedium)
             OutlinedButton(onClick = {
