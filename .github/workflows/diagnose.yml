@@ -1,0 +1,17 @@
+name: Diagnose
+on: workflow_dispatch
+jobs:
+  inbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          export GCLOUD_PROJECT=$(jq -r .project_id "$RUNNER_TEMP/sa.json")
+          npm i --no-save firebase-admin@12 >/dev/null 2>&1
+          node tools/inbox-check.js
