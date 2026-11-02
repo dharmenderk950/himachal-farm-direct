@@ -336,7 +336,7 @@ fun CartScreen(onBack: () -> Unit, openLocation: () -> Unit, addAddress: () -> U
                             q == null -> Text(if (addresses.isEmpty()) "Add an address above to check delivery" else "Choose an address above", color = FarmColors.Muted)
                             q.eligible -> Text(
                                 "✓ Available" + (if (q.distanceKm > 0) " · ${Geo.formatKm(q.distanceKm)}" else "") +
-                                    " · " + when { s.mode == FulfilmentMode.FARM_PICKUP -> "pickup, no charge"; q.deliveryCharge == 0.0 -> "free delivery"; else -> "delivery ${rupees(q.deliveryCharge)}" },
+                                    " · " + if (s.mode == FulfilmentMode.FARM_PICKUP) "pickup from farm" else "delivery included in price",
                                 color = FarmColors.Leaf, fontWeight = FontWeight.SemiBold,
                             )
                             else -> Text("✗ " + q.reasons.joinToString("\n✗ ").ifBlank { "Not available for this address" }, color = FarmColors.Danger)
@@ -347,10 +347,10 @@ fun CartScreen(onBack: () -> Unit, openLocation: () -> Unit, addAddress: () -> U
             // 3) Total + order.
             item {
                 val eligibleTotal = vm.groups(lines).filterKeys { s.quotes[it]?.eligible == true }
-                    .values.sumOf { g -> g.sumOf { it.price * it.qty } } +
-                    s.quotes.values.filter { it.eligible }.sumOf { it.deliveryCharge }
+                    .values.sumOf { g -> g.sumOf { it.price * it.qty } }
                 Column(Modifier.padding(16.dp).background(FarmColors.Mint, RoundedCornerShape(14.dp)).padding(16.dp)) {
                     Text("To pay: ${rupees(eligibleTotal)}", style = MaterialTheme.typography.titleLarge, color = FarmColors.Forest)
+                    Text("No extra delivery charge — prices already include delivery.", color = FarmColors.Leaf, fontWeight = FontWeight.SemiBold)
                     Text("Pay the farmer by cash or UPI when you receive it. After ordering you'll see the seller's phone number.", color = FarmColors.Muted)
                     s.message?.let { Text(it, color = FarmColors.Danger, modifier = Modifier.padding(top = 6.dp)) }
                     Spacer(Modifier.height(12.dp))

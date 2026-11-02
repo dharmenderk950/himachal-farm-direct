@@ -178,14 +178,11 @@ async function evaluate(
 
   // ---- chosen mode
   let deliveryCharge = 0;
+  // No separate delivery charge: the seller's selling price already includes delivery.
   if (p.fulfilment === "HOME_DELIVERY") {
     reasons.push(...homeProblems);
-    const free = cfg.freeAboveOrderValue > 0 && itemsTotal >= cfg.freeAboveOrderValue;
-    deliveryCharge = free ? 0 : cfg.baseCharge + Math.ceil(distanceKm) * cfg.perKm +
-      Number(pinRule.extraCharge ?? 0) + Number(villageRule.extraCharge ?? 0);
   } else if (p.fulfilment === "COLLECTION_CENTRE") {
     if (!centre) reasons.push("No collection centre near you for this farmer");
-    deliveryCharge = cfg.collectionCentreCharge;
   }
 
   return {

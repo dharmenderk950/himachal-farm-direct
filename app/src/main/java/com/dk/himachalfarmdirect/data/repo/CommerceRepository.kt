@@ -179,17 +179,9 @@ class OrderRepository @Inject constructor(
             else centreName = "${best.first.name}, ${best.first.village}"
         }
 
-        var charge = 0.0
-        when (mode) {
-            FulfilmentMode.HOME_DELIVERY.name -> {
-                reasons += homeProblems
-                val freeAbove = num(cfg, "freeAboveOrderValue", 0.0)
-                charge = if (freeAbove > 0 && itemsTotal >= freeAbove) 0.0
-                else num(cfg, "baseCharge", 20.0) + kotlin.math.ceil(distance) * num(cfg, "perKm", 4.0) +
-                    ((pinRule["extraCharge"] as? Number)?.toDouble() ?: 0.0) + ((villageRule["extraCharge"] as? Number)?.toDouble() ?: 0.0)
-            }
-            FulfilmentMode.COLLECTION_CENTRE.name -> charge = num(cfg, "collectionCentreCharge", 0.0)
-        }
+        // No separate delivery charge: the seller's selling price already includes delivery.
+        val charge = 0.0
+        if (mode == FulfilmentMode.HOME_DELIVERY.name) reasons += homeProblems
         val modes = buildList {
             if (homeProblems.isEmpty()) add(FulfilmentMode.HOME_DELIVERY.name)
             if (farmer.collectionCentreIds.isNotEmpty()) add(FulfilmentMode.COLLECTION_CENTRE.name)
@@ -354,6 +346,11 @@ class SellerRepository @Inject constructor(
 
     suspend fun updateStock(productId: String, stock: Double) {
         db.collection("products").document(productId).update("stock", stock).await()
+    }
+
+    /** Permanently removes the seller's own product (past orders keep their copy of it). */
+    suspend fun deleteProduct(productId: String) {
+        db.collection("products").document(productId).delete().await()
     }
 }
 

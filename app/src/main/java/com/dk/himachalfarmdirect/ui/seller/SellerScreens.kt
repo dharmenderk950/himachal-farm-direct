@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -102,6 +104,23 @@ class SellerViewModel @Inject constructor(
     fun setStock(p: Product, stock: Double) = viewModelScope.launch {
         runCatching { seller.updateStock(p.id, stock.coerceAtLeast(0.0)) }.onFailure { message.value = it.friendly() }
     }
+    fun delete(p: Product) = viewModelScope.launch {
+        runCatching { seller.deleteProduct(p.id) }
+            .onSuccess { message.value = null }
+            .onFailure { message.value = it.friendly() }
+    }
+}
+
+/** "Delete this product?" confirmation, shared by the list and the edit screen. */
+@Composable
+fun ConfirmDeleteDialog(name: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete product?") },
+        text = { Text("\"$name\" will be removed from the app permanently. Buyers will no longer see it. Past orders are not affected.") },
+        confirmButton = { Button(onClick = onConfirm, colors = ButtonDefaults.buttonColors(containerColor = FarmColors.Danger)) { Text("Delete") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -152,6 +171,8 @@ fun MyProductsScreen(openEdit: (String?) -> Unit) {
     val vm: SellerViewModel = hiltViewModel()
     val products by vm.products.collectAsStateWithLifecycle()
     val msg by vm.message.collectAsStateWithLifecycle()
+    var toDelete by remember { mutableStateOf<Product?>(null) }
+    toDelete?.let { p -> ConfirmDeleteDialog(p.name, onConfirm = { vm.delete(p); toDelete = null }, onDismiss = { toDelete = null }) }
     Scaffold(
         floatingActionButton = {
             ExtendedFloatingActionButton(onClick = { openEdit(null) }, icon = { Icon(Icons.Default.Add, null) }, text = { Text("Add product") })
@@ -169,11 +190,24 @@ fun MyProductsScreen(openEdit: (String?) -> Unit) {
                             Text(if (p.active) "Live" else "Hidden", color = if (p.active) FarmColors.Leaf else FarmColors.Muted)
                         }
                         Text("${rupees(p.price)}/${p.unit} · ${if (p.deliveryAvailable) "delivery" else "pickup only"}", color = FarmColors.Muted)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Stock: ${p.stock} ${p.unit}", Modifier.weight(1f))
-                            TextButton(onClick = { vm.setStock(p, p.stock - 1) }) { Text("−1") }
-                            TextButton(onClick = { vm.setStock(p, p.stock + 1) }) { Text("+1") }
-                            TextButton(onClick = { vm.setStock(p, p.stock + 10) }) { Text("+10") }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Stock left: ${if (p.stock % 1.0 == 0.0) p.stock.toLong() else p.stock} ${p.unit}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (p.stock <= 0) FarmColors.Danger else FarmColors.Forest,
+                        )
+                        Text("Change stock:", style = MaterialTheme.typography.bodyMedium, color = FarmColors.Muted)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(onClick = { vm.setStock(p, p.stock - 1) }, enabled = p.stock > 0, modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Remove 1 ${p.unit}", maxLines = 1) }
+                            OutlinedButton(onClick = { vm.setStock(p, p.stock + 1) }, modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Add 1 ${p.unit}", maxLines = 1) }
+                            OutlinedButton(onClick = { vm.setStock(p, p.stock + 10) }, modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Add 10 ${p.unit}", maxLines = 1) }
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { openEdit(p.id) }) { Text("Edit") }
+                            TextButton(onClick = { toDelete = p }) { Text("Delete", color = FarmColors.Danger) }
                         }
                     }
                 }
@@ -207,6 +241,16 @@ class ProductEditViewModel @Inject constructor(
     }
 
     fun update(f: (Product) -> Product) = product.update(f)
+
+    fun delete() = viewModelScope.launch {
+        val p = product.value
+        if (p.id.isBlank()) return@launch
+        saving.value = true
+        runCatching { seller.deleteProduct(p.id) }
+            .onSuccess { saved.value = true }
+            .onFailure { result.value = it.friendly() }
+        saving.value = false
+    }
 
     fun save() = viewModelScope.launch {
         val p = product.value
@@ -259,7 +303,7 @@ fun ProductEditScreen(onBack: () -> Unit) {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(priceText, { priceText = it; vm.update { x -> x.copy(price = it.toDoubleOrNull() ?: 0.0) } },
-                    label = { Text("Your price ₹") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
+                    label = { Text("Selling price ₹ (incl. delivery)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
                 OutlinedTextField(mrpText, { mrpText = it; vm.update { x -> x.copy(mrp = it.toDoubleOrNull() ?: 0.0) } },
                     label = { Text("Market price ₹") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
             }
@@ -273,6 +317,15 @@ fun ProductEditScreen(onBack: () -> Unit) {
                 color = FarmColors.Muted, style = MaterialTheme.typography.bodyMedium)
             msg?.let { Text(it, color = FarmColors.Danger) }
             Button(onClick = vm::save, enabled = !saving, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(if (saving) "Saving…" else "Save product") }
+            if (p.id.isNotBlank()) {
+                var confirm by remember { mutableStateOf(false) }
+                if (confirm) ConfirmDeleteDialog(p.name, onConfirm = { confirm = false; vm.delete() }, onDismiss = { confirm = false })
+                OutlinedButton(
+                    onClick = { confirm = true }, enabled = !saving,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, FarmColors.Danger),
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) { Text("Delete this product", color = FarmColors.Danger) }
+            }
         }
     }
 }

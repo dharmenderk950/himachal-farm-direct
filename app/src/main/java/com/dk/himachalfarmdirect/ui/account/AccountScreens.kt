@@ -297,7 +297,7 @@ private fun OrderCard(o: Order, seller: Boolean, setStatus: (String, String) -> 
         }
         o.createdAt?.let { Text(fmt.format(it.toDate()), color = FarmColors.Muted) }
         Text(o.lines.joinToString { "${it.name} × ${it.qty.toInt()} ${it.unit}" }, modifier = Modifier.padding(vertical = 4.dp))
-        Text("Total ${rupees(o.grandTotal)} (delivery ${rupees(o.deliveryCharge)}) · ${o.fulfilment.replace('_', ' ').lowercase()}", color = FarmColors.Muted)
+        Text("Total ${rupees(o.grandTotal)} (delivery included) · ${o.fulfilment.replace('_', ' ').lowercase()}", color = FarmColors.Muted)
         if (o.collectionCentreName.isNotBlank()) Text("Collection centre: ${o.collectionCentreName}", color = FarmColors.Muted)
         if (seller) {
             // Farmer sees the buyer's contact + full address for this order only.

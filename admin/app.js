@@ -306,7 +306,7 @@ function bindOrderActions() {
       <div>How</div><div>${esc(String(o.fulfilment || "").replaceAll("_", " ").toLowerCase())}${o.collectionCentreName ? " — " + esc(o.collectionCentreName) : ""}</div>
       <div>Items</div><div>${(o.lines || []).map((l) => `${esc(l.name)} × ${esc(l.qty)} ${esc(l.unit)} @ ${rs(l.price)}`).join("<br>")}</div>
       <div>Items total</div><div>${rs(o.itemsTotal)}</div>
-      <div>Delivery</div><div>${rs(o.deliveryCharge)}</div>
+      <div>Delivery</div><div>Included in price</div>
       <div><b>Grand total</b></div><div><b>${rs(o.grandTotal)}</b></div></div>
       <div class="toolbar" style="margin-top:16px"><select id="ostat">${statuses.map((s) => `<option value="${s}" ${s === o.status ? "selected" : ""}>${ST[s][0]}</option>`).join("")}</select>
       <button class="btn pri" id="osave">Change status</button></div>
@@ -457,15 +457,14 @@ bind.centres = () => {
 // ---- settings
 VIEWS.settings = () => {
   const d = { baseCharge: 20, perKm: 4, freeAboveOrderValue: 500, maxDeliveryKm: 50, collectionCentreCharge: 0, collectionCentreMaxKm: 25, minOrderValue: 0, ...S.delivery };
-  const pinRules = Object.entries(d.pinRules || {}).map(([pin, r]) => `${pin}:${r.blocked ? "block" : (r.extraCharge || 0)}`).join(", ");
+  const pinRules = Object.entries(d.pinRules || {}).filter(([, r]) => r.blocked).map(([pin]) => pin).join(", ");
   const F = (k, l) => `<label>${l}<input name="${k}" type="number" step="any" min="0" value="${esc(d[k])}"></label>`;
-  return `<div class="panel"><h3>🚚 Delivery charges & limits</h3>
+  return `<div class="panel"><h3>🚚 Delivery limits</h3>
   <form class="form" id="df">
-    ${F("baseCharge", "Base delivery charge ₹")}${F("perKm", "Per km ₹")}${F("freeAboveOrderValue", "Free delivery above ₹ (0 = never)")}
-    ${F("maxDeliveryKm", "Max home-delivery distance km")}${F("collectionCentreCharge", "Collection-centre charge ₹")}
+    <p class="muted full" style="margin:0">No delivery charge is added at checkout — each seller's selling price already includes delivery.</p>
+    ${F("maxDeliveryKm", "Max home-delivery distance km")}
     ${F("collectionCentreMaxKm", "Max buyer → centre km")}${F("minOrderValue", "Minimum order ₹")}
-    <label class="full">PIN rules — extra charge or block, e.g. <code>175001:10, 175002:block</code><input name="pinRules" value="${esc(pinRules)}"></label>
-    <p class="muted full" style="margin:0">Example now: 5 km order of ₹300 → ₹${(+d.baseCharge || 0) + 5 * (+d.perKm || 0)} delivery.</p>
+    <label class="full">Blocked PIN codes (no home delivery), e.g. <code>175001, 175002</code><input name="pinRules" value="${esc(pinRules)}"></label>
     <div class="row"><button class="btn pri">Save delivery settings</button></div></form></div>
   <div class="panel"><h3>✉️ Support</h3>
   <form class="form" id="sf">
@@ -477,11 +476,10 @@ VIEWS.settings = () => {
 };
 bind.settings = () => {
   $("#df").onsubmit = (ev) => { ev.preventDefault(); const f = Object.fromEntries(new FormData(ev.target)); const pinRules = {};
-    String(f.pinRules || "").split(",").map((x) => x.trim()).filter(Boolean).forEach((x) => { const [pin, v] = x.split(":").map((y) => y.trim());
-      if (/^\d{6}$/.test(pin)) pinRules[pin] = v === "block" ? { blocked: true } : { extraCharge: +v || 0 }; });
+    String(f.pinRules || "").split(/[,\s]+/).map((x) => x.trim()).filter((x) => /^\d{6}$/.test(x)).forEach((pin) => { pinRules[pin] = { blocked: true }; });
     const num = (k) => +f[k] || 0;
-    act(() => setDoc(doc(db, "config", "delivery"), { baseCharge: num("baseCharge"), perKm: num("perKm"), freeAboveOrderValue: num("freeAboveOrderValue"),
-      maxDeliveryKm: num("maxDeliveryKm"), collectionCentreCharge: num("collectionCentreCharge"), collectionCentreMaxKm: num("collectionCentreMaxKm"),
+    act(() => setDoc(doc(db, "config", "delivery"), { baseCharge: 0, perKm: 0, freeAboveOrderValue: 0, collectionCentreCharge: 0,
+      maxDeliveryKm: num("maxDeliveryKm"), collectionCentreMaxKm: num("collectionCentreMaxKm"),
       minOrderValue: num("minOrderValue"), pinRules, villageRules: S.delivery.villageRules || {} }), "Delivery settings saved — used from the next checkout"); };
   $("#sf").onsubmit = (ev) => { ev.preventDefault(); const f = Object.fromEntries(new FormData(ev.target));
     act(() => setDoc(doc(db, "config", "support"), { adminEmail: f.adminEmail.trim() }, { merge: true }), "Saved"); };
