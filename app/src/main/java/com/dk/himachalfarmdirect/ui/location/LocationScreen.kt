@@ -61,18 +61,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dk.himachalfarmdirect.data.geo.LatLngPoint
 import com.dk.himachalfarmdirect.data.model.Address
 import com.dk.himachalfarmdirect.ui.common.BackBar
+import com.dk.himachalfarmdirect.ui.common.PinMap
 import com.dk.himachalfarmdirect.ui.theme.FarmColors
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.CameraMoveStartedReason
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapProperties
-import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.rememberCameraPositionState
 
-/** Initial map view only (Mandi district). Never used as a result or saved location. */
-private val MANDI = LatLng(31.708, 76.932)
 
 @Composable
 fun LocationScreen(onBack: () -> Unit, onDone: () -> Unit) {
@@ -89,23 +80,6 @@ fun LocationScreen(onBack: () -> Unit, onDone: () -> Unit) {
     var addrLine by remember { mutableStateOf("") }
 
     LaunchedEffect(ui.done) { if (ui.done) onDone() }
-
-    val camera = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(ui.pin?.let { LatLng(it.lat, it.lng) } ?: MANDI, if (ui.pin != null) 14f else 9f)
-    }
-    // Follow the pin when GPS / search / saved address moves it.
-    LaunchedEffect(ui.pin) {
-        ui.pin?.let { p ->
-            val target = LatLng(p.lat, p.lng)
-            if (camera.position.target != target) camera.animate(CameraUpdateFactory.newLatLngZoom(target, 14f))
-        }
-    }
-    // When the user drags the map, the centre becomes the new pin.
-    LaunchedEffect(camera.isMoving) {
-        if (!camera.isMoving && camera.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE) {
-            vm.movePin(LatLngPoint(camera.position.target.latitude, camera.position.target.longitude))
-        }
-    }
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
         val granted = res.values.any { it }
@@ -180,16 +154,11 @@ fun LocationScreen(onBack: () -> Unit, onDone: () -> Unit) {
             item {
                 Text("Or move the map so the pin is on your place", Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.bodyMedium, color = FarmColors.Muted)
-                Box(Modifier.fillMaxWidth().height(280.dp).padding(horizontal = 16.dp)) {
-                    GoogleMap(
-                        modifier = Modifier.fillMaxSize(),
-                        cameraPositionState = camera,
-                        properties = MapProperties(isMyLocationEnabled = vm.hasPermission()),
-                        uiSettings = MapUiSettings(zoomControlsEnabled = true, myLocationButtonEnabled = false, mapToolbarEnabled = false),
-                    )
-                    Icon(Icons.Default.LocationOn, "Selected point", tint = FarmColors.Danger,
-                        modifier = Modifier.size(44.dp).align(Alignment.Center).offset(y = (-20).dp))
-                }
+                PinMap(
+                    center = ui.pin,
+                    onUserMoved = { vm.movePin(it) },
+                    modifier = Modifier.fillMaxWidth().height(280.dp).padding(horizontal = 16.dp),
+                )
                 if (ui.pin != null) Column(Modifier.padding(16.dp)) {
                     Text(ui.pinLabel.ifBlank { "Selected point" }, style = MaterialTheme.typography.titleMedium)
                     if (ui.pinPin.isNotBlank()) Text("PIN ${ui.pinPin}", color = FarmColors.Muted)

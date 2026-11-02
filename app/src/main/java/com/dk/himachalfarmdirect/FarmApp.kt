@@ -9,12 +9,20 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import dagger.hilt.android.HiltAndroidApp
+import org.osmdroid.config.Configuration
 
 @HiltAndroidApp
 class FarmApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // OpenStreetMap: identify the app (tile policy) and cache tiles inside the app's own storage.
+        Configuration.getInstance().apply {
+            userAgentValue = packageName
+            osmdroidBasePath = cacheDir.resolve("osm")
+            osmdroidTileCache = cacheDir.resolve("osm/tiles")
+            tileFileSystemCacheMaxBytes = 80L * 1024 * 1024
+        }
         if (Build.VERSION.SDK_INT >= 26) {
             val nm = getSystemService(NotificationManager::class.java)
             listOf(

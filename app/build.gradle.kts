@@ -5,7 +5,6 @@ plugins {
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
     id("com.google.gms.google-services")
-    id("com.google.android.libraries.mapsplatform.secrets-gradle-plugin")
 }
 
 android {
@@ -52,11 +51,6 @@ android {
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
-secrets {
-    propertiesFileName = "local.properties"
-    defaultPropertiesFileName = "secrets.defaults.properties"
-}
-
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.10.00")
     implementation(composeBom)
@@ -90,7 +84,8 @@ dependencies {
 
     // Location, maps, geohash
     implementation("com.google.android.gms:play-services-location:21.3.0")
-    implementation("com.google.maps.android:maps-compose:6.2.0")
+    // Free OpenStreetMap tiles — no API key or billing account needed
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
     implementation("com.firebase:geofire-android-common:3.2.0")
 
     // One-tap Google sign-in (Credential Manager)

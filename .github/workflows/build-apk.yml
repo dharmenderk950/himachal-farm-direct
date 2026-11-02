@@ -3,7 +3,6 @@
 #
 # One-time setup (repository → Settings → Secrets and variables → Actions → New repository secret):
 #   GOOGLE_SERVICES_JSON  = full text of google-services.json from your Firebase project
-#   MAPS_API_KEY          = your Google Maps Android API key (optional; map shows blank without it)
 name: Build APK
 
 on:
@@ -30,11 +29,6 @@ jobs:
             exit 1
           fi
           printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
-
-      - name: Maps key
-        env:
-          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
-        run: echo "MAPS_API_KEY=${MAPS_API_KEY:-REPLACE_WITH_YOUR_MAPS_API_KEY}" > local.properties
 
       - uses: actions/setup-java@v4
         with:

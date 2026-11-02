@@ -75,17 +75,11 @@ import com.dk.himachalfarmdirect.data.repo.OrderRepository
 import com.dk.himachalfarmdirect.data.repo.SellerRepository
 import com.dk.himachalfarmdirect.data.repo.UserRepository
 import com.dk.himachalfarmdirect.ui.common.BackBar
+import com.dk.himachalfarmdirect.ui.common.PinMap
 import com.dk.himachalfarmdirect.ui.common.EmptyState
 import com.dk.himachalfarmdirect.ui.common.rupees
 import com.dk.himachalfarmdirect.ui.theme.FarmColors
 import com.dk.himachalfarmdirect.util.friendly
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.CameraMoveStartedReason
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.rememberCameraPositionState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -202,7 +196,15 @@ class ProductEditViewModel @Inject constructor(
     val result = MutableStateFlow<String?>(null)
     val saved = MutableStateFlow(false)
 
-    init { id?.let { viewModelScope.launch { market.product(it)?.let { p -> product.value = p } } } }
+    init {
+        id?.let { pid ->
+            viewModelScope.launch {
+                runCatching { market.product(pid) }
+                    .onSuccess { p -> p?.let { product.value = it } }
+                    .onFailure { result.value = it.friendly() }
+            }
+        }
+    }
 
     fun update(f: (Product) -> Product) = product.update(f)
 
@@ -299,7 +301,10 @@ class FarmProfileViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            users.myFarm()?.let { farm.value = it }
+            // A blocked/offline database must show a message, never crash the app.
+            runCatching { users.myFarm() }
+                .onSuccess { it?.let { f -> farm.value = f } }
+                .onFailure { message.value = it.friendly() }
             if (farm.value.lat != 0.0) loadCentres()
         }
     }
@@ -319,7 +324,7 @@ class FarmProfileViewModel @Inject constructor(
 
     fun setPoint(p: LatLngPoint) = viewModelScope.launch {
         farm.update { it.copy(lat = p.lat, lng = p.lng) }
-        loc.reverseGeocode(p)?.let { a ->
+        runCatching { loc.reverseGeocode(p) }.getOrNull()?.let { a ->
             farm.update {
                 it.copy(
                     village = it.village.ifBlank { a.subLocality ?: a.locality ?: "" },
@@ -368,15 +373,6 @@ fun FarmProfileScreen(onBack: () -> Unit) {
     var radiusText by remember(f.id) { mutableStateOf(if (f.deliveryRadiusKm > 0) f.deliveryRadiusKm.toInt().toString() else "") }
     LaunchedEffect(saved) { if (saved) onBack() }
 
-    val camera = rememberCameraPositionState { position = CameraPosition.fromLatLngZoom(LatLng(31.708, 76.932), 9f) }
-    LaunchedEffect(f.lat, f.lng) {
-        if (f.lat != 0.0 && camera.cameraMoveStartedReason != CameraMoveStartedReason.GESTURE)
-            camera.animate(CameraUpdateFactory.newLatLngZoom(LatLng(f.lat, f.lng), 15f))
-    }
-    LaunchedEffect(camera.isMoving) {
-        if (!camera.isMoving && camera.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE)
-            vm.setPoint(LatLngPoint(camera.position.target.latitude, camera.position.target.longitude))
-    }
     val perm = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { vm.useGps() }
 
     Scaffold(topBar = { BackBar("Farm details", onBack) }) { pad ->
@@ -391,11 +387,11 @@ fun FarmProfileScreen(onBack: () -> Unit) {
             }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.MyLocation, null); Spacer(Modifier.width(8.dp)); Text("I'm at my farm — use GPS")
             }
-            Box(Modifier.fillMaxWidth().height(240.dp).clip(RoundedCornerShape(12.dp))) {
-                GoogleMap(Modifier.fillMaxSize(), cameraPositionState = camera,
-                    uiSettings = MapUiSettings(zoomControlsEnabled = true, mapToolbarEnabled = false))
-                Icon(Icons.Default.LocationOn, "Farm", tint = FarmColors.Danger, modifier = Modifier.size(44.dp).align(Alignment.Center).offset(y = (-20).dp))
-            }
+            PinMap(
+                center = if (f.lat != 0.0) LatLngPoint(f.lat, f.lng) else null,
+                onUserMoved = { vm.setPoint(it) },
+                modifier = Modifier.fillMaxWidth().height(240.dp).clip(RoundedCornerShape(12.dp)),
+            )
             Text("Or drag the map so the pin is on your farm.", color = FarmColors.Muted, style = MaterialTheme.typography.bodyMedium)
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

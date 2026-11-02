@@ -1,0 +1,56 @@
+# Deploys Firestore security rules + indexes (works on the free Spark plan), and the Cloud
+# Functions backend when the project is on the Blaze plan.
+#
+# One-time setup: Firebase → Project settings → Service accounts → "Generate new private key".
+# Paste the whole downloaded JSON into a repository secret named FIREBASE_SERVICE_ACCOUNT.
+name: Deploy Firebase
+
+on:
+  push:
+    branches: [main]
+    paths: ["firestore.rules", "firestore.indexes.json", "functions/**", "firebase.json", ".github/workflows/deploy-firebase.yml"]
+  workflow_dispatch:
+    inputs:
+      functions:
+        description: "Also deploy Cloud Functions (needs Blaze plan)"
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check service account
+        id: sa
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then
+            echo "::warning::FIREBASE_SERVICE_ACCOUNT secret not set — skipping deploy."
+            echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          echo "project=$(jq -r .project_id "$RUNNER_TEMP/sa.json")" >> "$GITHUB_OUTPUT"
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.sa.outputs.ok == 'true'
+        with:
+          node-version: 20
+
+      - name: Deploy Firestore rules and indexes
+        if: steps.sa.outputs.ok == 'true'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: npx --yes firebase-tools@13 deploy --only firestore --project "${{ steps.sa.outputs.project }}" --non-interactive --force
+
+      - name: Deploy Cloud Functions (Blaze plan)
+        if: steps.sa.outputs.ok == 'true' && (inputs.functions == true)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: |
+          cd functions && npm ci || npm install
+          cd .. && npx --yes firebase-tools@13 deploy --only functions --project "${{ steps.sa.outputs.project }}" --non-interactive --force
