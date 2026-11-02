@@ -21,6 +21,17 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // Fixed debug key (kept in the repo) so every build has the same SHA-1 for Firebase
+    // phone login, and new APKs install over old ones.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("hfd-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
