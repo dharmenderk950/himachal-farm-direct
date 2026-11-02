@@ -7,7 +7,12 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+    // Admins: anyone given the `admin` custom claim, plus the owner's Google account.
+    function isAdmin() {
+      return signedIn() && (request.auth.token.admin == true
+        || (request.auth.token.email_verified == true
+            && request.auth.token.email in ['dharmenderk950@gmail.com']));
+    }
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
     function onlyChanges(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
     function approvedSeller() {
@@ -30,6 +35,7 @@ service cloud.firestore {
       }
       match /notifications/{id} {
         allow read: if isOwner(uid);
+        allow create: if isAdmin();
         allow update: if isOwner(uid) && onlyChanges(['read', 'readAt']);
       }
     }

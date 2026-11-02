@@ -7,3 +7,4 @@ app/google-services.json
 functions/node_modules/
 functions/lib/
 functions/service-account.json
+admin/firebase-config.js

@@ -1,5 +1,5 @@
-# Deploys Firestore security rules + indexes (works on the free Spark plan), and the Cloud
-# Functions backend when the project is on the Blaze plan.
+# Deploys Firestore security rules + indexes and the admin dashboard on Firebase Hosting
+# (both work on the free Spark plan), and the Cloud Functions backend when on the Blaze plan.
 #
 # One-time setup: Firebase → Project settings → Service accounts → "Generate new private key".
 # Paste the whole downloaded JSON into a repository secret named FIREBASE_SERVICE_ACCOUNT.
@@ -8,7 +8,7 @@ name: Deploy Firebase
 on:
   push:
     branches: [main]
-    paths: ["firestore.rules", "firestore.indexes.json", "functions/**", "firebase.json", ".github/workflows/deploy-firebase.yml"]
+    paths: ["firestore.rules", "firestore.indexes.json", "functions/**", "admin/**", "firebase.json", ".github/workflows/deploy-firebase.yml"]
   workflow_dispatch:
     inputs:
       functions:
@@ -46,6 +46,31 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
         run: npx --yes firebase-tools@13 deploy --only firestore --project "${{ steps.sa.outputs.project }}" --non-interactive --force
+
+      - name: Connect admin dashboard to this Firebase project
+        if: steps.sa.outputs.ok == 'true'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+          P: ${{ steps.sa.outputs.project }}
+        run: |
+          FB="npx --yes firebase-tools@13"
+          APPID=$($FB apps:list WEB --project "$P" --json | jq -r '[.result[] | select(.displayName=="HFD Admin")][0].appId // .result[0].appId // empty')
+          if [ -z "$APPID" ]; then
+            APPID=$($FB apps:create WEB "HFD Admin" --project "$P" --json | jq -r '.result.appId')
+          fi
+          echo "Web app: $APPID"
+          $FB apps:sdkconfig WEB "$APPID" --project "$P" --json | jq '.result.sdkConfig' > "$RUNNER_TEMP/web.json"
+          test "$(jq -r .apiKey "$RUNNER_TEMP/web.json")" != "null"
+          echo "window.FIREBASE_CONFIG = $(cat "$RUNNER_TEMP/web.json");" > admin/firebase-config.js
+          # Make sure the default Hosting site exists.
+          $FB hosting:sites:list --project "$P" --json | jq -e '.result.sites | length > 0' >/dev/null \
+            || $FB hosting:sites:create "$P" --project "$P" --non-interactive
+
+      - name: Deploy admin dashboard
+        if: steps.sa.outputs.ok == 'true'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: npx --yes firebase-tools@13 deploy --only hosting --project "${{ steps.sa.outputs.project }}" --non-interactive --force
 
       - name: Deploy Cloud Functions (Blaze plan)
         if: steps.sa.outputs.ok == 'true' && (inputs.functions == true)
