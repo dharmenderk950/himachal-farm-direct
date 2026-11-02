@@ -16,7 +16,8 @@ android {
         applicationId = "com.dk.himachalfarmdirect"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
+        // Each GitHub build gets a higher number, so a new APK always installs as an update.
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1)
         versionName = "1.0.0"
         vectorDrawables { useSupportLibrary = true }
     }
