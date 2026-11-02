@@ -63,11 +63,33 @@ class UserRepository @Inject constructor(
      * sellerStatus = APPROVED; otherwise the effective mode is always BUYER. A seller in
      * Buyer Mode shops from other farmers with the same account.
      */
+    /**
+     * Seller status read straight from the user's own farmers/{uid} doc, so approval works
+     * even before the backend functions are deployed: approved=true → APPROVED,
+     * rejected=true → REJECTED, doc exists → PENDING, no doc → NONE.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val sellerStatus: Flow<SellerStatus> = authState.flatMapLatest { user ->
+        if (user == null) flowOf(SellerStatus.NONE) else callbackFlow {
+            val reg = db.collection("farmers").document(user.uid).addSnapshotListener { s, _ ->
+                trySend(
+                    when {
+                        s == null || !s.exists() -> SellerStatus.NONE
+                        s.getBoolean("approved") == true -> SellerStatus.APPROVED
+                        s.getBoolean("rejected") == true -> SellerStatus.REJECTED
+                        else -> SellerStatus.PENDING
+                    }
+                )
+            }
+            awaitClose { reg.remove() }
+        }
+    }
+
     val mode: Flow<AppMode> = combine(
-        profile,
+        sellerStatus,
         context.modeStore.data.map { runCatching { AppMode.valueOf(it[modeKey] ?: "BUYER") }.getOrDefault(AppMode.BUYER) },
-    ) { p, stored ->
-        if (p?.sellerStatus == SellerStatus.APPROVED.name) stored else AppMode.BUYER
+    ) { status, stored ->
+        if (status == SellerStatus.APPROVED) stored else AppMode.BUYER
     }
 
     suspend fun setMode(mode: AppMode) {

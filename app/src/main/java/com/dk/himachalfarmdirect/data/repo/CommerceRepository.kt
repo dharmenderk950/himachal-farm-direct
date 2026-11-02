@@ -150,6 +150,18 @@ class SellerRepository @Inject constructor(
             "updatedAt" to FieldValue.serverTimestamp(),
         )
         if (p.id.isBlank()) data["createdAt"] = FieldValue.serverTimestamp()
+        // Copy the farm's location + name onto the product so nearby search finds it
+        // (the backend does this too once Cloud Functions are deployed).
+        db.collection("farmers").document(uid).get().await().let { f ->
+            val lat = f.getDouble("lat"); val lng = f.getDouble("lng")
+            if (lat != null && lng != null) {
+                data["lat"] = lat; data["lng"] = lng
+                data["geohash"] = f.getString("geohash")?.takeIf { it.isNotBlank() }
+                    ?: com.dk.himachalfarmdirect.data.geo.Geo.hash(com.dk.himachalfarmdirect.data.geo.LatLngPoint(lat, lng))
+            }
+            data["farmerName"] = (f.getString("farmName")?.takeIf { it.isNotBlank() } ?: f.getString("name")).orEmpty()
+            data["searchKeywords"] = searchKeywords(p.name, p.nameHindi, p.category, f.getString("village").orEmpty())
+        }
         if (p.thumbUrl.isNotBlank()) data["thumbUrl"] = p.thumbUrl
         if (p.imageUrl.isNotBlank()) data["imageUrl"] = p.imageUrl
         ref.set(data, SetOptions.merge()).await()
@@ -158,6 +170,17 @@ class SellerRepository @Inject constructor(
     suspend fun updateStock(productId: String, stock: Double) {
         db.collection("products").document(productId).update("stock", stock).await()
     }
+}
+
+/** Lower-case word prefixes (2+ letters) so the search box finds "app" → "apple". */
+internal fun searchKeywords(vararg texts: String): List<String> {
+    val words = linkedSetOf<String>()
+    texts.forEach { t ->
+        t.lowercase().split(Regex("[\\s,/-]+")).filter { it.length >= 2 }.forEach { w ->
+            for (n in 2..minOf(w.length, 12)) words += w.take(n)
+        }
+    }
+    return words.take(100)
 }
 
 /** Help Centre tickets (spec E). Ticket numbers are issued by the backend. */

@@ -82,6 +82,7 @@ class AccountViewModel @Inject constructor(
 ) : ViewModel() {
     val profile = users.profile.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val mode = users.mode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppMode.BUYER)
+    val sellerStatus = users.sellerStatus.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SellerStatus.NONE)
     val discovery = location.discoveryEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val addresses = users.addresses().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -117,7 +118,7 @@ fun AccountScreen(nav: AccountNav) {
     val mode by vm.mode.collectAsStateWithLifecycle()
     val discovery by vm.discovery.collectAsStateWithLifecycle()
     val addresses by vm.addresses.collectAsStateWithLifecycle()
-    val status = runCatching { SellerStatus.valueOf(p?.sellerStatus ?: "NONE") }.getOrDefault(SellerStatus.NONE)
+    val status by vm.sellerStatus.collectAsStateWithLifecycle()
 
     LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
