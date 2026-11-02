@@ -11,6 +11,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -57,3 +60,13 @@ jobs:
           name: HimachalFarmDirect-APK
           path: HimachalFarmDirect-v1.0.0.apk
           retention-days: 30
+
+      # Also publish on the Releases page: one tap to download the APK on a phone.
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Himachal Farm Direct (build ${{ github.run_number }})
+          body: Tap HimachalFarmDirect-v1.0.0.apk below to download, then open it on your phone to install.
+          files: HimachalFarmDirect-v1.0.0.apk
+          make_latest: true
