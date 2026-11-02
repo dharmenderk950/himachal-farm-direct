@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,7 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,19 +52,13 @@ import com.dk.himachalfarmdirect.R
 import com.dk.himachalfarmdirect.ui.theme.FarmColors
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import com.google.firebase.FirebaseException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.auth.PhoneAuthCredential
-import com.google.firebase.auth.PhoneAuthOptions
-import com.google.firebase.auth.PhoneAuthProvider
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import java.util.concurrent.TimeUnit
 
 /**
  * Easiest first: one-tap "Continue with Google" (free, no SMS, works on Firebase Spark plan).
- * Mobile-number OTP stays as the second option (needs Firebase Blaze plan for SMS).
  */
 @Composable
 fun LoginScreen(onSignedIn: (name: String) -> Unit, onHelp: () -> Unit) {
@@ -74,12 +66,6 @@ fun LoginScreen(onSignedIn: (name: String) -> Unit, onHelp: () -> Unit) {
     val auth = remember { FirebaseAuth.getInstance() }
     val scope = rememberCoroutineScope()
 
-    var showPhone by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var otp by remember { mutableStateOf("") }
-    var verificationId by remember { mutableStateOf<String?>(null) }
-    var resendToken by remember { mutableStateOf<PhoneAuthProvider.ForceResendingToken?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -105,41 +91,10 @@ fun LoginScreen(onSignedIn: (name: String) -> Unit, onHelp: () -> Unit) {
         } catch (_: GetCredentialCancellationException) {
             // user closed the sheet — nothing to show
         } catch (_: NoCredentialException) {
-            error = "No Google account on this phone. Add one in phone Settings → Accounts, or use your mobile number."
+            error = "No Google account on this phone. Add one in phone Settings → Accounts → Add account → Google, then try again."
         } catch (e: Exception) {
             error = "Google login failed: ${e.message?.take(140) ?: "unknown error"}"
         } finally { busy = false }
-    }
-
-    // ---------------- Phone OTP
-    fun signIn(cred: PhoneAuthCredential) = scope.launch {
-        busy = true
-        runCatching { auth.signInWithCredential(cred).await() }
-            .onSuccess { onSignedIn(name) }
-            .onFailure { error = "That code didn't work. Check it and try again." }
-        busy = false
-    }
-
-    fun sendOtp(resend: Boolean = false) {
-        val digits = phone.filter { it.isDigit() }.takeLast(10)
-        if (digits.length != 10) { error = "Enter your 10-digit mobile number"; return }
-        busy = true; error = null
-        val builder = PhoneAuthOptions.newBuilder(auth)
-            .setPhoneNumber("+91$digits")
-            .setTimeout(60L, TimeUnit.SECONDS)
-            .setActivity(activity)
-            .setCallbacks(object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-                override fun onVerificationCompleted(c: PhoneAuthCredential) { signIn(c) }
-                override fun onVerificationFailed(e: FirebaseException) {
-                    busy = false
-                    error = otpError(e)
-                }
-                override fun onCodeSent(id: String, token: PhoneAuthProvider.ForceResendingToken) {
-                    busy = false; verificationId = id; resendToken = token
-                }
-            })
-        if (resend) resendToken?.let { builder.setForceResendingToken(it) }
-        PhoneAuthProvider.verifyPhoneNumber(builder.build())
     }
 
     Column(
@@ -160,7 +115,7 @@ fun LoginScreen(onSignedIn: (name: String) -> Unit, onHelp: () -> Unit) {
             border = BorderStroke(1.5.dp, FarmColors.Line),
             modifier = Modifier.fillMaxWidth().height(58.dp),
         ) {
-            if (busy && !showPhone) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+            if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
             else {
                 GoogleG()
                 Spacer(Modifier.width(12.dp))
@@ -170,67 +125,12 @@ fun LoginScreen(onSignedIn: (name: String) -> Unit, onHelp: () -> Unit) {
         Text("One tap — uses the Google account already on your phone", style = MaterialTheme.typography.bodyMedium,
             color = FarmColors.Muted, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
 
-        Spacer(Modifier.height(24.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            HorizontalDivider(Modifier.weight(1f)); Text("  or  ", color = FarmColors.Muted); HorizontalDivider(Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(16.dp))
-
-        if (!showPhone) {
-            TextButton(onClick = { showPhone = true; error = null }) { Text("Use mobile number (OTP)", fontSize = 16.sp) }
-        } else if (verificationId == null) {
-            OutlinedTextField(name, { name = it }, label = { Text("Your name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                phone, { phone = it.filter(Char::isDigit).take(10) },
-                label = { Text("Mobile number") }, prefix = { Text("+91 ") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = { sendOtp() }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = Color.White) else Text("Send OTP")
-            }
-        } else {
-            Text("Enter the 6-digit code sent to +91 $phone", style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                otp, { otp = it.filter(Char::isDigit).take(6) }, label = { Text("OTP") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = { verificationId?.let { signIn(PhoneAuthProvider.getCredential(it, otp)) } },
-                enabled = !busy && otp.length == 6, modifier = Modifier.fillMaxWidth().height(52.dp),
-            ) { if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = Color.White) else Text("Verify & continue") }
-            TextButton(onClick = { sendOtp(resend = true) }, enabled = !busy) { Text("Resend code") }
-            TextButton(onClick = { verificationId = null; otp = "" }) { Text("Change number") }
-        }
-
         error?.let {
             Spacer(Modifier.height(12.dp))
             Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
         }
         Spacer(Modifier.height(24.dp))
         TextButton(onClick = onHelp) { Text("Need help signing in?") }
-    }
-}
-
-/** Plain-language reason for an OTP failure, so the problem is clear on screen. */
-private fun otpError(e: FirebaseException): String {
-    val m = e.message.orEmpty()
-    return when {
-        m.contains("BILLING_NOT_ENABLED", true) || m.contains("billing", true) ->
-            "SMS login is not active on the server yet. Please use \"Continue with Google\"."
-        m.contains("OPERATION_NOT_ALLOWED", true) || m.contains("not enabled", true) ->
-            "Mobile login is switched off on the server. Please use \"Continue with Google\"."
-        m.contains("app identifier", true) || m.contains("INVALID_APP_CREDENTIAL", true) || m.contains("Play Integrity", true) ->
-            "This app version isn't registered for SMS yet. Please use \"Continue with Google\"."
-        m.contains("TOO_MANY", true) || m.contains("blocked", true) ->
-            "Too many tries. Wait a while, or use \"Continue with Google\"."
-        m.contains("network", true) -> "No internet. Check your connection and try again."
-        else -> "Could not send the code (${m.take(100)}). Please use \"Continue with Google\"."
     }
 }
 

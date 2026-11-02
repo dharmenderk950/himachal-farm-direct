@@ -11,11 +11,11 @@ object HelpContent {
     val articles = listOf(
         // ---------------- BUYER
         HelpArticle("b_login", BUYER, "Registration and login",
-            "1. Open the app and enter your name and 10-digit mobile number.\n" +
-            "2. Tap Send OTP. A 6-digit code comes by SMS — on most phones it fills in by itself.\n" +
-            "3. Tap Verify & continue. Your account is created automatically.\n\n" +
-            "No password is needed. If the code does not arrive in 1 minute, tap Resend code. " +
-            "Check that the number is correct and that you have mobile signal."),
+            "1. Open the app and tap Continue with Google.\n" +
+            "2. Choose your Google account (the one already on your phone). Your account is created automatically.\n" +
+            "3. Choose I want to BUY or I am a FARMER / SELLER.\n\n" +
+            "No password or OTP is needed. If it says no Google account was found, open phone Settings → Accounts → " +
+            "Add account → Google, then try again."),
         HelpArticle("b_nearby", BUYER, "Finding nearby products",
             "1. On Home, tap the location line under the app name.\n" +
             "2. Tap Use my current location, or type your village / PIN code, or move the map pin.\n" +
@@ -88,7 +88,7 @@ object HelpContent {
             "• App closes: update to the latest version from the person who shared it, then restart your phone.\n" +
             "• Still stuck: raise a support request with topic App problem."),
         HelpArticle("g_security", GENERAL, "Account security",
-            "Your login is protected by OTP to your phone. Never share an OTP with anyone. If you lose your phone, contact support to block your account. " +
+            "Your login is protected by your Google account. Never share your Google password or any code sent to you. If you lose your phone, contact support to block your account. " +
             "Use Sign out in Account on shared phones."),
         HelpArticle("g_privacy", GENERAL, "Privacy policy",
             "We collect your name, mobile number, delivery addresses and, only when you allow it, your location.\n\n" +
