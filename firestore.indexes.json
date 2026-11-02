@@ -1,0 +1,33 @@
+{
+  "indexes": [
+    { "collectionGroup": "farmers", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" }, { "fieldPath": "geohash", "order": "ASCENDING" } ] },
+    { "collectionGroup": "farmers", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" }, { "fieldPath": "featured", "order": "ASCENDING" } ] },
+    { "collectionGroup": "farmers", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "approved", "order": "ASCENDING" }, { "fieldPath": "district", "order": "ASCENDING" } ] },
+    { "collectionGroup": "products", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "geohash", "order": "ASCENDING" } ] },
+    { "collectionGroup": "products", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "category", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "products", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "products", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "soldCount", "order": "DESCENDING" } ] },
+    { "collectionGroup": "products", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "onOffer", "order": "ASCENDING" } ] },
+    { "collectionGroup": "products", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "searchKeywords", "arrayConfig": "CONTAINS" } ] },
+    { "collectionGroup": "orders", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "buyerId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "orders", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "farmerId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "supportTickets", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "uid", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "banners", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "active", "order": "ASCENDING" }, { "fieldPath": "order", "order": "ASCENDING" } ] },
+    { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [
+      { "fieldPath": "notifyNewSellers", "order": "ASCENDING" }, { "fieldPath": "coarseGeohash", "order": "ASCENDING" } ] }
+  ],
+  "fieldOverrides": []
+}

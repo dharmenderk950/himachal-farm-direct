@@ -1,0 +1,12 @@
+{
+  "_comment": "Paste these fields into Firestore document config/delivery. Amounts in ₹. Edit any time — no app update needed. pinRules example: {\"175001\": {\"extraCharge\": 10}, \"175002\": {\"blocked\": true}}. villageRules keys are lower-case village names.",
+  "baseCharge": 20,
+  "perKm": 4,
+  "freeAboveOrderValue": 500,
+  "maxDeliveryKm": 50,
+  "collectionCentreCharge": 0,
+  "collectionCentreMaxKm": 25,
+  "minOrderValue": 0,
+  "pinRules": {},
+  "villageRules": {}
+}

@@ -1,0 +1,90 @@
+rules_version = '2';
+// Himachal Farm Direct — security rules.
+// Customers' exact locations/addresses are readable ONLY by their owner (and, per order,
+// by the farmer fulfilling it). Approval, roles, ticket numbers, order totals and stock
+// deductions are set by Cloud Functions, never trusted from the client.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function onlyChanges(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function approvedSeller() {
+      return signedIn() && get(/databases/$(database)/documents/farmers/$(request.auth.uid)).data.approved == true;
+    }
+
+    // ---------------- users (private)
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid)
+        && !request.resource.data.keys().hasAny(['isAdmin', 'sellerStatus']);
+      allow update: if isAdmin() || (isOwner(uid)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isAdmin', 'sellerStatus']));
+
+      match /addresses/{id} {
+        allow read, write: if isOwner(uid);
+      }
+      match /wishlist/{id} {
+        allow read, write: if isOwner(uid);
+      }
+      match /notifications/{id} {
+        allow read: if isOwner(uid);
+        allow update: if isOwner(uid) && onlyChanges(['read', 'readAt']);
+      }
+    }
+
+    // ---------------- farmers (public business profiles)
+    match /farmers/{farmerId} {
+      allow read: if resource.data.approved == true || isOwner(farmerId) || isAdmin();
+      allow create: if isOwner(farmerId)
+        && request.resource.data.approved == false
+        && request.resource.data.featured == false
+        && !request.resource.data.keys().hasAny(['rejected', 'rating']);
+      allow update: if isAdmin() || (isOwner(farmerId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['approved', 'featured', 'rejected', 'rating']));
+      allow delete: if isAdmin();
+    }
+
+    // ---------------- products
+    match /products/{id} {
+      allow read: if true;
+      allow create: if approvedSeller() && request.resource.data.farmerId == request.auth.uid
+        && request.resource.data.price is number && request.resource.data.price > 0
+        && request.resource.data.stock is number && request.resource.data.stock >= 0
+        && !request.resource.data.keys().hasAny(['soldCount']);
+      allow update: if isAdmin() || (approvedSeller() && resource.data.farmerId == request.auth.uid
+        && request.resource.data.farmerId == request.auth.uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['soldCount'])
+        && request.resource.data.stock is number && request.resource.data.stock >= 0);
+      allow delete: if isAdmin() || (signedIn() && resource.data.farmerId == request.auth.uid);
+    }
+
+    // ---------------- orders (created/changed only via Cloud Functions)
+    match /orders/{id} {
+      allow read: if signedIn() && (resource.data.buyerId == request.auth.uid
+        || resource.data.farmerId == request.auth.uid || isAdmin());
+      allow write: if false;
+
+      match /private/{doc} {
+        allow read: if signedIn() && (resource.data.buyerId == request.auth.uid
+          || resource.data.farmerId == request.auth.uid || isAdmin());
+        allow write: if false;
+      }
+    }
+
+    // ---------------- support tickets (created via function; admin replies)
+    match /supportTickets/{id} {
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow update: if isAdmin();
+      allow create, delete: if false;
+    }
+
+    // ---------------- public catalogue data, admin-managed
+    match /banners/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /collectionCentres/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /config/{id} { allow read: if isAdmin(); allow write: if isAdmin(); }
+    match /counters/{id} { allow read, write: if false; }
+    match /mail/{id} { allow read, write: if false; }
+  }
+}

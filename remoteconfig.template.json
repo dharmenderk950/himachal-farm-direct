@@ -1,0 +1,12 @@
+{
+  "parameters": {
+    "support_email": { "defaultValue": { "value": "dharmenderk950@hotmail.com" }, "description": "Help Centre support email" },
+    "support_whatsapp_identifier": { "defaultValue": { "value": "dkc@1978" }, "description": "Owner-supplied WhatsApp ID, shown as text only" },
+    "support_whatsapp_number": { "defaultValue": { "value": "+919418031378" }, "description": "WhatsApp-enabled number in international format" },
+    "support_whatsapp_verified": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN", "description": "Set to true ONLY after confirming the number receives WhatsApp messages. Shows the WhatsApp button." },
+    "search_radii_km": { "defaultValue": { "value": "5,10,20,50" }, "description": "Radius chips on Home" },
+    "support_hours": { "defaultValue": { "value": "10 AM – 6 PM, Mon–Sat" } },
+    "privacy_policy_url": { "defaultValue": { "value": "" } },
+    "terms_url": { "defaultValue": { "value": "" } }
+  }
+}

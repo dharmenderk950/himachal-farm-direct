@@ -1,0 +1,19 @@
+{
+  "name": "himachal-farm-direct-functions",
+  "private": true,
+  "main": "lib/index.js",
+  "engines": { "node": "20" },
+  "scripts": {
+    "build": "tsc",
+    "deploy": "npm run build && firebase deploy --only functions",
+    "set-admin": "node lib/setAdmin.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.1.0",
+    "geofire-common": "^6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
