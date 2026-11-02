@@ -123,7 +123,7 @@ fun AccountScreen(nav: AccountNav) {
         item {
             Column(Modifier.padding(16.dp)) {
                 Text(p?.name?.ifBlank { null } ?: "My account", style = MaterialTheme.typography.headlineSmall)
-                Text(p?.phone.orEmpty(), color = FarmColors.Muted)
+                Text(p?.phone?.ifBlank { null } ?: p?.email.orEmpty(), color = FarmColors.Muted)
             }
         }
         // Spec C: Buyer / Seller switch, same account, same APK.

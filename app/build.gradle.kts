@@ -92,6 +92,11 @@ dependencies {
     implementation("com.google.maps.android:maps-compose:6.2.0")
     implementation("com.firebase:geofire-android-common:3.2.0")
 
+    // One-tap Google sign-in (Credential Manager)
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+
     // Images: compressed thumbnails + disk cache for slow networks
     implementation("io.coil-kt:coil-compose:2.7.0")
 }

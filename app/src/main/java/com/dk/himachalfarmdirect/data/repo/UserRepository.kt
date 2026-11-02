@@ -79,8 +79,9 @@ class UserRepository @Inject constructor(
         val user = auth.currentUser ?: return
         val token = runCatching { FirebaseMessaging.getInstance().token.await() }.getOrNull()
         val data = buildMap<String, Any> {
-            put("phone", user.phoneNumber.orEmpty())
-            name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
+            user.phoneNumber?.takeIf { it.isNotBlank() }?.let { put("phone", it) }
+            user.email?.takeIf { it.isNotBlank() }?.let { put("email", it) }
+            (name?.takeIf { it.isNotBlank() } ?: user.displayName?.takeIf { it.isNotBlank() })?.let { put("name", it) }
             token?.let { put("fcmToken", it) }
             put("lastSeen", FieldValue.serverTimestamp())
         }
