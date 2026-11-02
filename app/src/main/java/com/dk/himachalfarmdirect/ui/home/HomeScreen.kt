@@ -85,6 +85,21 @@ fun HomeScreen(nav: HomeNav) {
     val online by vm.online.collectAsStateWithLifecycle()
     val cartCount by vm.cartCount.collectAsStateWithLifecycle()
     val unread by vm.unread.collectAsStateWithLifecycle()
+    val popup by vm.popup.collectAsStateWithLifecycle()
+
+    // New message from the admin (or an order/ticket update): show it right away.
+    popup?.let { n ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { vm.markRead(n.id) },
+            icon = { androidx.compose.material3.Icon(Icons.Default.Notifications, null, tint = FarmColors.Leaf) },
+            title = { Text(n.title) },
+            text = { Text(n.body, style = MaterialTheme.typography.bodyLarge) },
+            confirmButton = { androidx.compose.material3.Button(onClick = { vm.markRead(n.id) }) { Text("OK") } },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { vm.markRead(n.id); nav.openNotifications() }) { Text("All messages") }
+            },
+        )
+    }
 
     Column(Modifier.fillMaxSize()) {
         HomeHeader(

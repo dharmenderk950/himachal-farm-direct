@@ -34,7 +34,7 @@ service cloud.firestore {
         allow read, write: if isOwner(uid);
       }
       match /notifications/{id} {
-        allow read: if isOwner(uid);
+        allow read: if isOwner(uid) || isAdmin();
         allow create: if isAdmin();
         allow update: if isOwner(uid) && onlyChanges(['read', 'readAt']);
       }

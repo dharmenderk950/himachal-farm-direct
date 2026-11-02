@@ -56,7 +56,7 @@ class HomeViewModel @Inject constructor(
     private val location: LocationRepository,
     private val config: AppConfigRepository,
     private val cart: CartRepository,
-    extras: ExtrasRepository,
+    private val extras: ExtrasRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
@@ -64,8 +64,14 @@ class HomeViewModel @Inject constructor(
 
     val online = context.onlineFlow().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val cartCount = cart.lines.map { it.size }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-    val unread = extras.notifications().map { l -> l.count { !it.read } }
+    private val inbox = extras.notifications()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val unread = inbox.map { l -> l.count { !it.read } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    /** Newest unread inbox message, shown as a pop-up on Home so nobody misses it. */
+    val popup = inbox.map { l -> l.firstOrNull { !it.read } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    fun markRead(id: String) = viewModelScope.launch { runCatching { extras.markAllRead(listOf(id)) } }
     val wishlistIds = extras.wishlist().map { l -> l.map { it.id }.toSet() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 

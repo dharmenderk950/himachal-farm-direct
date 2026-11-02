@@ -5,7 +5,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAut
   from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   getFirestore, collection, doc, onSnapshot, query, orderBy, limit, updateDoc, setDoc, addDoc, deleteDoc,
-  getDoc, serverTimestamp,
+  getDoc, getDocs, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const $ = (s) => document.querySelector(s);
@@ -120,10 +120,14 @@ const userName = (uid) => { const u = S.users.find((x) => x.id === uid); return 
 const match = (q, ...fields) => !q || fields.some((f) => String(f ?? "").toLowerCase().includes(q.toLowerCase()));
 const tel = (p) => p ? `<a href="tel:+91${esc(String(p).slice(-10))}">+91 ${esc(String(p).slice(-10))}</a>` : "—";
 
+// Writes to the user's in-app inbox. Throws on failure so the admin sees a real error.
 async function notify(uid, title, body, open = "") {
-  if (!uid) return;
-  try { await addDoc(collection(db, "users", uid, "notifications"), { title, body, open, read: false, createdAt: serverTimestamp() }); }
-  catch (e) { console.warn("notify", e); }
+  if (!uid) throw new Error("no user");
+  await addDoc(collection(db, "users", uid, "notifications"), { title, body, open, read: false, createdAt: serverTimestamp() });
+}
+// Status-change notices shouldn't block the main action; report but carry on.
+async function notifySoft(uid, title, body, open = "") {
+  try { await notify(uid, title, body, open); } catch (e) { console.warn("notify", e); toast("Saved, but the in-app message could not be sent: " + (e.code || e.message)); }
 }
 async function act(fn, ok) {
   try {
@@ -197,12 +201,12 @@ function farmerTable(list, compact = false) {
 function bindFarmerActions() {
   on("[data-approve]", "click", (e) => { const id = e.currentTarget.dataset.approve;
     act(async () => { await updateDoc(doc(db, "farmers", id), { approved: true, rejected: false });
-      await notify(id, "You're verified! 🎉", "You can now switch to Seller mode in Account and add your products."); }, "Farmer approved"); });
+      await notifySoft(id, "You're verified! 🎉", "You can now switch to Seller mode in Account and add your products."); }, "Farmer approved"); });
   on("[data-reject]", "click", (e) => { const id = e.currentTarget.dataset.reject;
     const reason = prompt("Reason (sent to the farmer):", "Details could not be verified. Please update your farm details.");
     if (reason === null) return;
     act(async () => { await updateDoc(doc(db, "farmers", id), { approved: false, rejected: true, rejectReason: reason });
-      await notify(id, "Seller application update", reason); }, "Farmer rejected"); });
+      await notifySoft(id, "Seller application update", reason); }, "Farmer rejected"); });
   on("[data-feature]", "click", (e) => { const f = S.farmers.find((x) => x.id === e.currentTarget.dataset.feature);
     act(() => updateDoc(doc(db, "farmers", f.id), { featured: !f.featured }), f.featured ? "Removed from featured" : "Featured on home page"); });
   on("[data-fview]", "click", (e) => {
@@ -309,8 +313,8 @@ function bindOrderActions() {
       <p class="muted">Changing status here notifies the buyer. Stock is not adjusted automatically when an admin cancels — edit it under Products if needed.</p>`, () => {
       $("#osave").onclick = () => { const s = $("#ostat").value; if (s === o.status) return closeModal();
         act(async () => { await updateDoc(doc(db, "orders", o.id), { status: s, updatedAt: serverTimestamp() });
-          await notify(o.buyerId, "Order update", `Your order from ${o.farmerName} is now: ${ST[s][0].toLowerCase()}.`, "orders");
-          await notify(o.farmerId, "Order update by admin", `Order #${o.id.slice(-6).toUpperCase()} is now: ${ST[s][0].toLowerCase()}.`, "orders");
+          await notifySoft(o.buyerId, "Order update", `Your order from ${o.farmerName} is now: ${ST[s][0].toLowerCase()}.`, "orders");
+          await notifySoft(o.farmerId, "Order update by admin", `Order #${o.id.slice(-6).toUpperCase()} is now: ${ST[s][0].toLowerCase()}.`, "orders");
           closeModal(); }, "Status updated"); };
     });
   });
@@ -355,7 +359,7 @@ bind.tickets = () => {
       $("#tf").onsubmit = (ev) => { ev.preventDefault(); const d = Object.fromEntries(new FormData(ev.target));
         act(async () => {
           await updateDoc(doc(db, "supportTickets", t.id), { adminReply: d.reply.trim(), status: d.status, updatedAt: serverTimestamp() });
-          await notify(t.uid, `Reply on ticket ${t.ticketNo}`, d.reply.trim().slice(0, 140) || `Status: ${ST[d.status][0]}`, "tickets");
+          await notifySoft(t.uid, `Reply on ticket ${t.ticketNo}`, d.reply.trim().slice(0, 140) || `Status: ${ST[d.status][0]}`, "tickets");
           closeModal(); }, "Reply sent"); };
     });
   });
@@ -377,15 +381,30 @@ VIEWS.users = () => {
 };
 bind.users = () => {
   bindSearch();
-  on("[data-msg]", "click", (e) => { const id = e.currentTarget.dataset.msg;
-    openModal("Message " + userName(id), `<form class="form" id="mf" style="padding:0">
+  on("[data-msg]", "click", (e) => openMessage(e.currentTarget.dataset.msg));
+};
+
+async function openMessage(id) {
+  const u = S.users.find((x) => x.id === id) || {};
+  openModal("Message " + userName(id), `<form class="form" id="mf" style="padding:0">
       <label class="full">Title<input name="title" required value="Message from Himachal Farm Direct"></label>
       <label class="full">Message<textarea name="body" rows="4" required></textarea></label>
-      <div class="row"><button class="btn pri">Send to app inbox</button></div></form>`, () => {
-      $("#mf").onsubmit = (ev) => { ev.preventDefault(); const d = Object.fromEntries(new FormData(ev.target));
-        act(async () => { await notify(id, d.title, d.body); closeModal(); }, "Sent — shows under Notifications in the app"); };
-    }); });
-};
+      <div class="row"><button class="btn pri">Send</button></div></form>
+    <p class="muted">It pops up the next time ${esc(u.name || "the user")} opens the app (Home page), and stays under 🔔 Notifications.</p>
+    <h4 style="margin:16px 0 6px">Messages to this user</h4><div id="mhist" class="muted">Loading…</div>`, () => {
+    const load = async () => {
+      try {
+        const snap = await getDocs(query(collection(db, "users", id, "notifications"), orderBy("createdAt", "desc"), limit(20)));
+        $("#mhist").innerHTML = snap.empty ? "None yet." : `<table>${snap.docs.map((d) => { const n = d.data(); return `<tr>
+          <td><b>${esc(n.title)}</b><div class="muted">${esc(n.body)}</div></td><td>${when(n.createdAt)}</td>
+          <td>${n.read ? `<span class="pill p-ok">✓ Read ${n.readAt ? when(n.readAt) : ""}</span>` : '<span class="pill p-wait">Not read yet</span>'}</td></tr>`; }).join("")}</table>`;
+      } catch (err) { $("#mhist").textContent = "Couldn't load history: " + (err.code || err.message); }
+    };
+    load();
+    $("#mf").onsubmit = (ev) => { ev.preventDefault(); const d = Object.fromEntries(new FormData(ev.target));
+      act(async () => { await notify(id, d.title.trim(), d.body.trim()); ev.target.reset(); await load(); }, "Sent ✓ — the user will see it when they open the app"); };
+  });
+}
 
 // ---- banners
 VIEWS.banners = () => `<div class="panel"><h3>Add banner</h3>
